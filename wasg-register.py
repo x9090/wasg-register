@@ -20,6 +20,7 @@ from Crypto.Cipher import AES
 ISP_CONFIG = {
     "singtel" : {
         "essa_url" : "https://singtel-wsg.singtel.com/essa_r12",
+        "api_auth_id": "",
         "api_password" : "",
         "create_api_versions" : ("2.6", "2.8"),
         "retrieve_api_versions" : ("2.0", "2.6")
@@ -27,7 +28,24 @@ ISP_CONFIG = {
 
     "starhub" : {
         "essa_url" : "https://api.wifi.starhub.net.sg/essa_r12",
+        "api_auth_id": "",
         "api_password" : "5t4rHUB4p1",
+        "create_api_versions" : ("2.6", "2.8"),
+        "retrieve_api_versions" : ("2.0", "2.6")
+    },
+
+    "m1" : {
+        "essa_url" : "https://web.m1net.com.sg/essa_wssg/wsg_essareg.asmx",
+        "api_auth_id": "essa_wsgxuat_imda",
+        "api_password" : "2acd7927335d82bx7a1976e73aead66e8e",
+        "create_api_versions" : ("2.6", "2.8"),
+        "retrieve_api_versions" : ("2.0", "2.6")
+    },
+
+    "m1_2" : {
+        "essa_url" : "https://web.m1net.com.sg/wssg_essa/EssaWssgReg.asmx",
+        "api_auth_id": "essa_wsgxuat_imda",
+        "api_password" : "2acd7927335d82bx7a1976e73aead66e8e",
         "create_api_versions" : ("2.6", "2.8"),
         "retrieve_api_versions" : ("2.0", "2.6")
     },
@@ -101,29 +119,65 @@ def request_registration(isp,
                          country, email, transid,
                          retrieve_mode=False):
 
+    api_auth_id = ISP_CONFIG[isp]["api_auth_id"]
     api_password = ISP_CONFIG[isp]["api_password"]
 
-    if retrieve_mode:
-        api = "retrieve_user_r12x2a"
-        api_version = ISP_CONFIG[isp]["retrieve_api_versions"][0]
+    # M1 is using XML form for registration and validation
+    if isp == "m1":
+        if retrieve_mode:
+            api = "essa_checkPrimaryId"
+            xml_input = r"%3C%3Fxml%20version%3D%271.0%27%20encoding%3D%27utf-8%27%20%3F%3E%3CChkPrimaryInput%20xmlns%3Axsi%3D%27http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema-instance%27%20xmlns%3Axsd%3D%27http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%27%20%20messageName%3D%27ChkPrimaryId%27%3E%3CaDOB%3E{0}%3C%2FaDOB%3E%3CaMobileNum%3E{1}%3C%2FaMobileNum%3E%3CaTranId%3E{2}%3C%2FaTranId%3E%3C%2FChkPrimaryInput%3E".format(mobile, dob, transid.decode('utf-8'))
+        else:
+            api = "essa_registration"
+            xml_input = r"%3C%3Fxml%20version%3D%271.0%27%20encoding%3D%27utf-8%27%20%3F%3E%3CEssaRegistration%20xmlns%3Axsi%3D%27http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema-instance%27%20xmlns%3Axsd%3D%27http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%27%20messageName%3D%27EssaSubsInfo%27%3E%3CaMobileNum%3E{0}%3C%2FaMobileNum%3E%3CaDOB%3E{1}%3C%2FaDOB%3E%3CaTranId%3E{2}%3C%2FaTranId%3E%3C%2FEssaRegistration%3E".format(mobile, dob, transid.decode('utf-8'))
+        
+        url = ISP_CONFIG[isp]["essa_url"] + "/" + api
+        r = requests.post(url,
+                        params={
+                            "sAuth_uId" : api_auth_id,
+                            "sAuth_pwd" : api_password,
+                            "strInputXml" : xml_input
+                        })
+        print(r.status_code)
+    elif isp == "m1_2":
+        nric = "s1234567J"
+        if retrieve_mode:
+            api = "essa_checkPrimaryId"
+            xml_input = r"%3CChkPrimaryInput%3E%3CaNricType%3E{0}%3C%2FaNricType%3E%3CaNric%3E{1}%3C%2FaNric%3E%3CaMobileNum%3E{2}%3C%2FaMobileNum%3E%3CaTranId%3E{3}%3C%2FaTranId%3E%3C%2FChkPrimaryInput%3E".format("2", nric, mobile, transid.decode('utf-8'))
+        else:
+            api = "essa_registration"
+            xml_input = r"%3CEssaRegistration%3E%3CaInputTitle%3E{0}%3C%2FaInputTitle%3E%3CaNric%3E{1}%3C%2FaNric%3E%3CaNricType%3E{2}%3C%2FaNricType%3E%3CaDob%3E{3}%3C%2FaDOb%3E%3CaEmailAddr%3E{4}%3C%2FaEmailAddr%3E%3CaNationality%3E{5}%3C%2FaNationality%3E%3CaFullname%3E{6}%3C%2FaFullname%3E%3CaMobileNum%3E{7}%3C%2FaMobileNum%3E%3C%2FEssaRegistration%3E".format(salutation, nric, "2", dob, email, country, name, mobile)
+        
+        url = ISP_CONFIG[isp]["essa_url"] + "/" + api
+        r = requests.post(url,
+                        params={
+                            "sAuth_uId" : api_auth_id,
+                            "sAuth_pwd" : api_password,
+                            "strInputXml" : xml_input
+                        })
+        print(r.status_code)
     else:
-        api = "create_user_r12x1a"
-        api_version = ISP_CONFIG[isp]["create_api_versions"][0]
-    #endif
+        if retrieve_mode:
+            api = "retrieve_user_r12x2a"
+            api_version = ISP_CONFIG[isp]["retrieve_api_versions"][0]
+        else:
+            api = "create_user_r12x1a"
+            api_version = ISP_CONFIG[isp]["create_api_versions"][0]
     
-    r = requests.get(ISP_CONFIG[isp]["essa_url"],
-                     params={
-                         "api" : api,
-                         "api_password" : api_password,
-                         "salutation" : salutation,
-                         "name" : name,
-                         "gender" : gender,
-                         "dob" : dob,
-                         "mobile" : mobile,
-                         "nationality" : country,
-                         "email" : email,
-                         "tid" : transid,
-                     })
+        r = requests.get(ISP_CONFIG[isp]["essa_url"],
+                        params={
+                            "api" : api,
+                            "api_password" : api_password,
+                            "salutation" : salutation,
+                            "name" : name,
+                            "gender" : gender,
+                            "dob" : dob,
+                            "mobile" : mobile,
+                            "nationality" : country,
+                            "email" : email,
+                            "tid" : transid,
+                        })
+    #endif
 
     if r.status_code != requests.codes.ok:
         raise HTTPNotFoundExn("Failed to make request query, status code: {}".format(r.status_code))
